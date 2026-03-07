@@ -60,6 +60,9 @@
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
     "import-tileset": "tsx scripts/import-tileset-cli.ts",
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install",
+    "build": "cd client && npm run build && cd ../server && npx tsc",
+    "start": "node server/dist/index.js",
     "start:web": "concurrently \"cd server && npm run dev\" \"cd client && npm run dev\"",
     "server:dev": "cd server && ts-node-dev --respawn --transpile-only index.ts",
     "client:dev": "cd client && npm run dev"
