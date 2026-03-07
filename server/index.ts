@@ -3,6 +3,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import cors from "cors";
 import path from "path";
+import fs from "fs";
 import dotenv from "dotenv";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOpenAI } from "@langchain/openai";
@@ -28,9 +29,27 @@ const io = new Server(httpServer, {
 
 const PORT = process.env.PORT || 3001;
 
-// Serve static assets from the client public directory
-const assetsPath = path.join(__dirname, "../client/public");
-app.use(express.static(assetsPath));
+// Serve static assets from the client public directory (for dev) and build directory (for prod)
+const publicPath = path.join(__dirname, "../../client/public");
+const buildPath = path.join(__dirname, "../../client/dist");
+
+app.use(express.static(publicPath));
+if (fs.existsSync(buildPath)) {
+  app.use(express.static(buildPath));
+  console.log(`Serving client from ${buildPath}`);
+} else {
+  console.log(`Production build not found at ${buildPath}, running in dev mode.`);
+}
+
+// Redirect all non-API requests to the client index.html (SPA support)
+app.get("*", (req, res) => {
+  const indexPath = path.join(buildPath, "index.html");
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.send("Pixel Agent Server is running...");
+  }
+});
 
 let agents = new Map<number, any>();
 let nextAgentId = 1;
