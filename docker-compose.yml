@@ -1,8 +1,72 @@
 services:
-  pixel-agent:
-    build: .
+  nginx:
+    image: nginx:alpine
     ports:
-      - "3001:3001"
+      - "80:80"
+    volumes:
+      - ./nginx.dev.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - backend
+
+  frontend:
+    image: node:24-alpine
+    working_dir: /app
+    volumes:
+      - ./client:/app
+      - client_node_modules:/app/node_modules
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - backend
+
+  backend:
+    image: python:3.14-slim
+    working_dir: /app
     env_file:
-      - server/.env
-    restart: unless-stopped
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://pixel:pixel@postgres:5432/pixel_agents
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - backend_venv:/app/.venv
+    command: >
+      sh -c "pip install uv > /dev/null 2>&1 &&
+             uv sync &&
+             uv run alembic upgrade head &&
+             uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pixel_agents}
+      POSTGRES_USER: ${POSTGRES_USER:-pixel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pixelpass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pixel} -d ${POSTGRES_DB:-pixel_agents}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:8-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
+  client_node_modules:
+  backend_venv:

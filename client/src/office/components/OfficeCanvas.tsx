@@ -8,7 +8,7 @@ import { TILE_SIZE, EditTool } from '../types.js'
 import { CAMERA_FOLLOW_LERP, CAMERA_FOLLOW_SNAP_THRESHOLD, ZOOM_MIN, ZOOM_MAX, ZOOM_SCROLL_THRESHOLD, PAN_MARGIN_FRACTION } from '../../constants.js'
 import { getCatalogEntry, isRotatable } from '../layout/furnitureCatalog.js'
 import { canPlaceFurniture, getWallPlacementRow } from '../editor/editorActions.js'
-import { vscode } from '../../vscodeApi.js'
+import { wsManager } from '../../api/websocket.js'
 import { unlockAudio } from '../../notificationSound.js'
 
 interface OfficeCanvasProps {
@@ -585,12 +585,12 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
                   officeState.selectedAgentId = null
                   officeState.cameraFollowId = null
                   // Persist seat assignments (exclude sub-agents)
-                  const seats: Record<number, { palette: number; seatId: string | null }> = {}
+                  const seats: Record<number, { palette: number; hueShift: number; seatId: string | null }> = {}
                   for (const ch of officeState.characters.values()) {
                     if (ch.isSubagent) continue
-                    seats[ch.id] = { palette: ch.palette, seatId: ch.seatId }
+                    seats[ch.id] = { palette: ch.palette, hueShift: ch.hueShift, seatId: ch.seatId }
                   }
-                  vscode.postMessage({ type: 'saveAgentSeats', seats })
+                  wsManager.send({ type: 'save_agent_seats', seats })
                   return
                 }
               }

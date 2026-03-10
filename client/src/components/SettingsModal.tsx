@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { vscode } from '../vscodeApi.js'
+import { wsManager } from '../api/websocket.js'
 import { isSoundEnabled, setSoundEnabled } from '../notificationSound.js'
 
 interface SettingsModalProps {
@@ -29,6 +29,41 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode 
   const [soundLocal, setSoundLocal] = useState(isSoundEnabled)
 
   if (!isOpen) return null
+
+  const handleExportLayout = () => {
+    // In web version, download layout as JSON file
+    const layout = localStorage.getItem('pixel-agents-layout')
+    if (layout) {
+      const blob = new Blob([layout], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'pixel-agents-layout.json'
+      a.click()
+      URL.revokeObjectURL(url)
+    }
+    onClose()
+  }
+
+  const handleImportLayout = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const text = await file.text()
+      try {
+        const layout = JSON.parse(text)
+        wsManager.send({ type: 'save_layout', layout })
+        localStorage.setItem('pixel-agents-layout', text)
+      } catch (err) {
+        console.error('Failed to parse layout:', err)
+      }
+    }
+    input.click()
+    onClose()
+  }
 
   return (
     <>
@@ -93,24 +128,7 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode 
         </div>
         {/* Menu items */}
         <button
-          onClick={() => {
-            vscode.postMessage({ type: 'openSessionsFolder' })
-            onClose()
-          }}
-          onMouseEnter={() => setHovered('sessions')}
-          onMouseLeave={() => setHovered(null)}
-          style={{
-            ...menuItemBase,
-            background: hovered === 'sessions' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
-          }}
-        >
-          Open Sessions Folder
-        </button>
-        <button
-          onClick={() => {
-            vscode.postMessage({ type: 'exportLayout' })
-            onClose()
-          }}
+          onClick={handleExportLayout}
           onMouseEnter={() => setHovered('export')}
           onMouseLeave={() => setHovered(null)}
           style={{
@@ -121,10 +139,7 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode 
           Export Layout
         </button>
         <button
-          onClick={() => {
-            vscode.postMessage({ type: 'importLayout' })
-            onClose()
-          }}
+          onClick={handleImportLayout}
           onMouseEnter={() => setHovered('import')}
           onMouseLeave={() => setHovered(null)}
           style={{
@@ -139,7 +154,7 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode 
             const newVal = !isSoundEnabled()
             setSoundEnabled(newVal)
             setSoundLocal(newVal)
-            vscode.postMessage({ type: 'setSoundEnabled', enabled: newVal })
+            wsManager.send({ type: 'set_sound_enabled', enabled: newVal })
           }}
           onMouseEnter={() => setHovered('sound')}
           onMouseLeave={() => setHovered(null)}
