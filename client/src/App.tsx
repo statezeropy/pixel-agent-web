@@ -6,14 +6,16 @@ import { EditorToolbar } from './office/editor/EditorToolbar.js'
 import { EditorState } from './office/editor/editorState.js'
 import { EditTool } from './office/types.js'
 import { isRotatable } from './office/layout/furnitureCatalog.js'
-import { vscode } from './vscodeApi.js'
-import { useExtensionMessages } from './hooks/useExtensionMessages.js'
+import { useWebSocket } from './hooks/useWebSocket.js'
+import { useAssetLoader } from './hooks/useAssetLoader.js'
 import { PULSE_ANIMATION_DURATION_SEC } from './constants.js'
 import { useEditorActions } from './hooks/useEditorActions.js'
 import { useEditorKeyboard } from './hooks/useEditorKeyboard.js'
 import { ZoomControls } from './components/ZoomControls.js'
 import { BottomToolbar } from './components/BottomToolbar.js'
 import { DebugView } from './components/DebugView.js'
+import { AgentCreateModal } from './components/AgentCreateModal.js'
+import { AgentChatPanel } from './components/AgentChatPanel.js'
 
 // Game state lives outside React — updated imperatively by message handlers
 const officeStateRef = { current: null as OfficeState | null }
@@ -117,19 +119,18 @@ function EditActionBar({ editor, editorState: es }: { editor: ReturnType<typeof 
 }
 
 function App() {
+  const assetState = useAssetLoader()
   const editor = useEditorActions(getOfficeState, editorState)
 
   const isEditDirty = useCallback(() => editor.isEditMode && editor.isDirty, [editor.isEditMode, editor.isDirty])
 
-  const { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
+  const ws = useWebSocket(getOfficeState, editor.setLastSavedLayout, isEditDirty)
 
   const [isDebugMode, setIsDebugMode] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showChatPanel, setShowChatPanel] = useState(false)
 
   const handleToggleDebugMode = useCallback(() => setIsDebugMode((prev) => !prev), [])
-
-  const handleSelectAgent = useCallback((id: number) => {
-    vscode.postMessage({ type: 'focusAgent', id })
-  }, [])
 
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -146,17 +147,34 @@ function App() {
     editor.handleToggleEditMode,
   )
 
-  const handleCloseAgent = useCallback((id: number) => {
-    vscode.postMessage({ type: 'closeAgent', id })
-  }, [])
+  const handleToggleChatPanel = useCallback(() => {
+    setShowChatPanel((prev) => !prev)
+    if (!ws.selectedAgent && ws.agents.length > 0) {
+      ws.selectAgent(ws.agents[0])
+    }
+  }, [ws.selectedAgent, ws.agents, ws.selectAgent])
 
   const handleClick = useCallback((agentId: number) => {
-    // If clicked agent is a sub-agent, focus the parent's terminal instead
     const os = getOfficeState()
     const meta = os.subagentMeta.get(agentId)
     const focusId = meta ? meta.parentAgentId : agentId
-    vscode.postMessage({ type: 'focusAgent', id: focusId })
+    ws.selectAgent(focusId)
+    setShowChatPanel(true)
+  }, [ws])
+
+  const handleCloseAgent = useCallback((id: number) => {
+    ws.closeAgent(id)
+  }, [ws])
+
+  const handleOpenClaude = useCallback(() => {
+    setShowCreateModal(true)
   }, [])
+
+  const handleCreateAgent = useCallback((provider: string, model: string, systemPrompt?: string) => {
+    ws.createAgent(provider, model, systemPrompt)
+    setShowCreateModal(false)
+    setShowChatPanel(true)
+  }, [ws])
 
   const officeState = getOfficeState()
 
@@ -175,10 +193,22 @@ function App() {
     return false
   })()
 
-  if (!layoutReady) {
+  if (!assetState.allReady || !ws.layoutReady) {
     return (
-      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--vscode-foreground)' }}>
-        Loading...
+      <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--pixel-text-dim)', gap: 8 }}>
+        <div style={{ fontSize: '24px' }}>Loading...</div>
+        <div style={{ fontSize: '16px', opacity: 0.6 }}>
+          {!assetState.characters && 'Characters...'}
+          {assetState.characters && !assetState.walls && 'Walls...'}
+          {assetState.walls && !assetState.floors && 'Floors...'}
+          {assetState.floors && !assetState.furniture && 'Furniture...'}
+          {assetState.allReady && !ws.layoutReady && 'Layout...'}
+        </div>
+        {!ws.isConnected && (
+          <div style={{ fontSize: '14px', color: 'var(--pixel-danger-bg)' }}>
+            Connecting to server...
+          </div>
+        )}
       </div>
     )
   }
@@ -225,11 +255,13 @@ function App() {
 
       <BottomToolbar
         isEditMode={editor.isEditMode}
-        onOpenClaude={editor.handleOpenClaude}
+        onOpenClaude={handleOpenClaude}
         onToggleEditMode={editor.handleToggleEditMode}
         isDebugMode={isDebugMode}
         onToggleDebugMode={handleToggleDebugMode}
-        workspaceFolders={workspaceFolders}
+        showChatPanel={showChatPanel}
+        onToggleChatPanel={handleToggleChatPanel}
+        hasAgents={ws.agents.length > 0}
       />
 
       {editor.isEditMode && editor.isDirty && (
@@ -260,7 +292,6 @@ function App() {
       )}
 
       {editor.isEditMode && (() => {
-        // Compute selected furniture color from current layout
         const selUid = editorState.selectedFurnitureUid
         const selColor = selUid
           ? officeState.getLayout().furniture.find((f) => f.uid === selUid)?.color ?? null
@@ -280,16 +311,16 @@ function App() {
             onWallColorChange={editor.handleWallColorChange}
             onSelectedFurnitureColorChange={editor.handleSelectedFurnitureColorChange}
             onFurnitureTypeChange={editor.handleFurnitureTypeChange}
-            loadedAssets={loadedAssets}
+            loadedAssets={assetState.loadedAssets}
           />
         )
       })()}
 
       <ToolOverlay
         officeState={officeState}
-        agents={agents}
-        agentTools={agentTools}
-        subagentCharacters={subagentCharacters}
+        agents={ws.agents}
+        agentTools={ws.agentTools}
+        subagentCharacters={ws.subagentCharacters}
         containerRef={containerRef}
         zoom={editor.zoom}
         panRef={editor.panRef}
@@ -298,13 +329,52 @@ function App() {
 
       {isDebugMode && (
         <DebugView
-          agents={agents}
-          selectedAgent={selectedAgent}
-          agentTools={agentTools}
-          agentStatuses={agentStatuses}
-          subagentTools={subagentTools}
-          onSelectAgent={handleSelectAgent}
+          agents={ws.agents}
+          selectedAgent={ws.selectedAgent}
+          agentTools={ws.agentTools}
+          agentStatuses={ws.agentStatuses}
+          subagentTools={ws.subagentTools}
+          onSelectAgent={() => {}}
         />
+      )}
+
+      {showCreateModal && (
+        <AgentCreateModal
+          onClose={() => setShowCreateModal(false)}
+          onCreate={handleCreateAgent}
+        />
+      )}
+
+      {showChatPanel && ws.selectedAgent !== null && (
+        <AgentChatPanel
+          agentId={ws.selectedAgent}
+          agents={ws.agents}
+          chatMessages={ws.chatMessages[ws.selectedAgent] || []}
+          streamingText={ws.streamingText[ws.selectedAgent] || ''}
+          onSendMessage={(msg) => ws.sendMessage(ws.selectedAgent!, msg)}
+          onSelectAgent={(id) => ws.selectAgent(id)}
+          onClose={() => setShowChatPanel(false)}
+        />
+      )}
+
+      {/* Connection status indicator */}
+      {!ws.isConnected && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            zIndex: 100,
+            background: 'var(--pixel-danger-bg)',
+            color: '#fff',
+            fontSize: '14px',
+            padding: '4px 8px',
+            borderRadius: 0,
+            border: '2px solid #c00',
+          }}
+        >
+          Disconnected
+        </div>
       )}
     </div>
   )

@@ -8,7 +8,7 @@ import { paintTile, placeFurniture, removeFurniture, moveFurniture, rotateFurnit
 import type { ExpandDirection } from '../office/editor/editorActions.js'
 import { getCatalogEntry, getRotatedType, getToggledType } from '../office/layout/furnitureCatalog.js'
 import { defaultZoom } from '../office/toolUtils.js'
-import { vscode } from '../vscodeApi.js'
+import { wsManager } from '../api/websocket.js'
 import { LAYOUT_SAVE_DEBOUNCE_MS, ZOOM_MIN, ZOOM_MAX } from '../constants.js'
 
 export interface EditorActions {
@@ -53,7 +53,7 @@ export function useEditorActions(
   const panRef = useRef({ x: 0, y: 0 })
   const lastSavedLayoutRef = useRef<OfficeLayout | null>(null)
 
-  // Called by useExtensionMessages on layoutLoaded to set the initial checkpoint
+  // Called by useWebSocket on layoutLoaded to set the initial checkpoint
   const setLastSavedLayout = useCallback((layout: OfficeLayout) => {
     lastSavedLayoutRef.current = structuredClone(layout)
   }, [])
@@ -62,7 +62,7 @@ export function useEditorActions(
   const saveLayout = useCallback((layout: OfficeLayout) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
-      vscode.postMessage({ type: 'saveLayout', layout })
+      wsManager.send({ type: 'save_layout', layout })
     }, LAYOUT_SAVE_DEBOUNCE_MS)
   }, [])
 
@@ -79,7 +79,8 @@ export function useEditorActions(
   }, [getOfficeState, editorState, saveLayout])
 
   const handleOpenClaude = useCallback(() => {
-    vscode.postMessage({ type: 'openClaude' })
+    // In web version, this triggers the AgentCreateModal in App.tsx
+    // The modal calls createAgent() directly via WebSocket
   }, [])
 
   const handleToggleEditMode = useCallback(() => {
@@ -303,7 +304,7 @@ export function useEditorActions(
     const os = getOfficeState()
     const layout = os.getLayout()
     lastSavedLayoutRef.current = structuredClone(layout)
-    vscode.postMessage({ type: 'saveLayout', layout })
+    wsManager.send({ type: 'save_layout', layout })
     editorState.isDirty = false
     setIsDirty(false)
   }, [getOfficeState, editorState])

@@ -8,20 +8,14 @@
     "url": "https://github.com/statezeropy/pixel-agent-web"
   },
   "scripts": {
-    "install:all": "npm install && cd client && npm install && cd ../server && npm install",
-    "build": "cd client && npm run build && cd ../server && npx tsc",
-    "start": "node server/dist/index.js",
-    "start:web": "concurrently \"cd server && npm run dev\" \"cd client && npm run dev\"",
-    "server:dev": "cd server && ts-node-dev --respawn --transpile-only index.ts",
-    "client:dev": "cd client && npm run dev"
+    "install:client": "cd client && npm install",
+    "install:backend": "cd backend && pip install -r requirements.txt",
+    "client:dev": "cd client && npm run dev",
+    "backend:dev": "cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "dev": "concurrently \"npm run backend:dev\" \"npm run client:dev\"",
+    "build": "cd client && npm run build"
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.74.0",
-    "@types/node": "22.x",
-    "@types/pngjs": "^6.0.5",
-    "concurrently": "^9.1.2",
-    "pngjs": "^7.0.0",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "concurrently": "^9.1.2"
   }
 }

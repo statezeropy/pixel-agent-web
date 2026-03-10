@@ -1,10 +1,40 @@
-out
-dist
-node_modules
-.vscode-test/
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+CLAUDE.md
+plan.md
+
+# Build output
+dist/
+out/
 *.vsix
-.claude/
-/logs
-/sprites-export
+
+# IDE
+.vscode-test/
+.idea/
+
+# Environment
 .env
-node_modules
+.claude/
+
+# Logs
+/logs
+
+# Temp
+/sprites-export
+
+# Paid assets (Donarg tileset)
+client/public/assets/furniture/
+client/public/assets/floors.png
+*.zip
+
+# Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Docker
+sandbox_data/

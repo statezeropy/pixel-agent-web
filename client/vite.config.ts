@@ -4,8 +4,20 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   build: {
-    outDir: '../dist/webview',
+    outDir: 'dist',
     emptyOutDir: true,
   },
-  base: './',
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://backend:8000',
+        changeOrigin: true,
+      },
+      '/ws': {
+        target: 'ws://backend:8000',
+        ws: true,
+      },
+    },
+  },
 })
