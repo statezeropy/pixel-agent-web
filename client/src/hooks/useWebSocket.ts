@@ -233,10 +233,6 @@ export function useWebSocket(
             })
           }
           os.setAgentActive(id, status === 'active')
-          if (status === 'active') {
-            // Show thinking bubble when agent first becomes active
-            os.showThinkingBubble(id)
-          }
           if (status === 'waiting') {
             os.showWaitingBubble(id)
             playDoneSound()
@@ -256,7 +252,6 @@ export function useWebSocket(
             })
           }
           if (status === 'error') {
-            os.showErrorBubble(id)
             // Flush any partial streaming text as error context
             setStreamingText((prev) => {
               const text = prev[id]
@@ -286,10 +281,6 @@ export function useWebSocket(
         case 'llm_start': {
           const id = msg.agent_id
           setAgentLlmPhase((prev) => ({ ...prev, [id]: true }))
-          // Clear error bubble when LLM starts (new generation attempt)
-          os.clearErrorBubble(id)
-          // Show thinking bubble while LLM prepares response
-          os.showThinkingBubble(id)
           os.setAgentActive(id, true)
           // Set tool to null so character shows typing animation (not tool-specific)
           os.setAgentTool(id, null)
@@ -316,7 +307,6 @@ export function useWebSocket(
           os.setAgentTool(id, toolName)
           os.setAgentActive(id, true)
           os.clearPermissionBubble(id)
-          os.clearThinkingBubble(id)
           // Create sub-agent character for Task tool subtasks
           if (status.startsWith('Subtask:')) {
             const label = status.slice('Subtask:'.length).trim()
@@ -474,8 +464,6 @@ export function useWebSocket(
             ...prev,
             [id]: (prev[id] || '') + msg.content,
           }))
-          // Clear thinking bubble once tokens start streaming (agent is now "typing" response)
-          os.clearThinkingBubble(id)
           // Ensure character is active and typing during token generation
           os.setAgentActive(id, true)
           os.setAgentTool(id, null) // null tool = typing animation

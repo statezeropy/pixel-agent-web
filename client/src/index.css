@@ -65,3 +65,104 @@ html, body, #root {
 * {
   font-family: 'FS Pixel Sans', sans-serif;
 }
+
+/* ── Speech Bubble ── */
+.speech-bubble {
+  max-width: 200px;
+  animation: speech-bubble-in 0.15s ease-out;
+}
+
+@keyframes speech-bubble-in {
+  from { opacity: 0; transform: translate(-50%, -90%); }
+  to   { opacity: 1; transform: translate(-50%, -100%); }
+}
+
+.speech-bubble__content {
+  background: #f0f0f5;
+  color: #222;
+  font-size: 11px;
+  line-height: 1.3;
+  padding: 4px 8px;
+  border: 2px solid #555566;
+  border-radius: 0;
+  box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.3);
+  word-break: break-word;
+  image-rendering: pixelated;
+}
+
+.speech-bubble__tail {
+  width: 0;
+  height: 0;
+  margin: 0 auto;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid #555566;
+  position: relative;
+}
+.speech-bubble__tail::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -3px;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 4px solid #f0f0f5;
+}
+
+/* Thinking — pulsing dots */
+.speech-bubble--thinking .speech-bubble__content {
+  text-align: center;
+  font-size: 16px;
+  letter-spacing: 3px;
+  animation: thinking-pulse 1s ease-in-out infinite;
+}
+@keyframes thinking-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* Streaming — slight highlight */
+.speech-bubble--streaming .speech-bubble__content {
+  border-color: #4488CC;
+}
+.speech-bubble--streaming .speech-bubble__tail {
+  border-top-color: #4488CC;
+}
+
+/* Error — red accent */
+.speech-bubble--error .speech-bubble__content {
+  background: #fff0f0;
+  border-color: #CC4444;
+  color: #882222;
+}
+.speech-bubble--error .speech-bubble__tail {
+  border-top-color: #CC4444;
+}
+.speech-bubble--error .speech-bubble__tail::after {
+  border-top-color: #fff0f0;
+}
+
+/* Tool — subtle gray */
+.speech-bubble--tool .speech-bubble__content {
+  background: #e8e8f0;
+  color: #444;
+  font-style: italic;
+}
+
+/* Done — fade out */
+.speech-bubble--done {
+  animation: speech-bubble-fade 5s ease-out forwards;
+}
+@keyframes speech-bubble-fade {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Pulse animation for active status dots */
+@keyframes pixel-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.pixel-agents-pulse {
+  animation: pixel-pulse 1.5s ease-in-out infinite;
+}

@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react'
 import { OfficeState } from './office/engine/officeState.js'
 import { OfficeCanvas } from './office/components/OfficeCanvas.js'
 import { ToolOverlay } from './office/components/ToolOverlay.js'
+import { SpeechBubble } from './office/components/SpeechBubble.js'
 import { EditorToolbar } from './office/editor/EditorToolbar.js'
 import { EditorState } from './office/editor/editorState.js'
 import { EditTool } from './office/types.js'
@@ -315,6 +316,19 @@ function App() {
           />
         )
       })()}
+
+      <SpeechBubble
+        officeState={officeState}
+        agents={ws.agents}
+        agentStatuses={ws.agentStatuses}
+        agentLlmPhase={ws.agentLlmPhase}
+        streamingText={ws.streamingText}
+        agentTools={ws.agentTools}
+        chatMessages={ws.chatMessages}
+        containerRef={containerRef}
+        zoom={editor.zoom}
+        panRef={editor.panRef}
+      />
 
       <ToolOverlay
         officeState={officeState}
