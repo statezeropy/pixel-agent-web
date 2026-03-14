@@ -600,14 +600,48 @@ export class OfficeState {
     }
   }
 
-  /** Dismiss bubble on click — permission: instant, waiting: quick fade */
+  showErrorBubble(id: number): void {
+    const ch = this.characters.get(id)
+    if (ch) {
+      ch.bubbleType = 'error'
+      ch.bubbleTimer = 0
+    }
+  }
+
+  clearErrorBubble(id: number): void {
+    const ch = this.characters.get(id)
+    if (ch && ch.bubbleType === 'error') {
+      ch.bubbleType = null
+      ch.bubbleTimer = 0
+    }
+  }
+
+  showThinkingBubble(id: number): void {
+    const ch = this.characters.get(id)
+    if (ch) {
+      // Don't override permission or error bubbles
+      if (ch.bubbleType === 'permission' || ch.bubbleType === 'error') return
+      ch.bubbleType = 'thinking'
+      ch.bubbleTimer = WAITING_BUBBLE_DURATION_SEC
+    }
+  }
+
+  clearThinkingBubble(id: number): void {
+    const ch = this.characters.get(id)
+    if (ch && ch.bubbleType === 'thinking') {
+      ch.bubbleType = null
+      ch.bubbleTimer = 0
+    }
+  }
+
+  /** Dismiss bubble on click — permission/error: instant, waiting/thinking: quick fade */
   dismissBubble(id: number): void {
     const ch = this.characters.get(id)
     if (!ch || !ch.bubbleType) return
-    if (ch.bubbleType === 'permission') {
+    if (ch.bubbleType === 'permission' || ch.bubbleType === 'error') {
       ch.bubbleType = null
       ch.bubbleTimer = 0
-    } else if (ch.bubbleType === 'waiting') {
+    } else if (ch.bubbleType === 'waiting' || ch.bubbleType === 'thinking') {
       // Trigger immediate fade (0.3s remaining)
       ch.bubbleTimer = Math.min(ch.bubbleTimer, DISMISS_BUBBLE_FAST_FADE_SEC)
     }
@@ -638,8 +672,8 @@ export class OfficeState {
         updateCharacter(ch, dt, this.walkableTiles, this.seats, this.tileMap, this.blockedTiles)
       )
 
-      // Tick bubble timer for waiting bubbles
-      if (ch.bubbleType === 'waiting') {
+      // Tick bubble timer for waiting/thinking bubbles (auto-dismiss)
+      if (ch.bubbleType === 'waiting' || ch.bubbleType === 'thinking') {
         ch.bubbleTimer -= dt
         if (ch.bubbleTimer <= 0) {
           ch.bubbleType = null

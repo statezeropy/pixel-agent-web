@@ -136,6 +136,12 @@ async def _stream_agent(ws: WebSocket, agent_id: int, message: str, thread_id: s
                     "tool_id": run_id,
                 })
 
+            elif kind == "on_chat_model_start":
+                await _send(ws, {
+                    "type": "llm_start",
+                    "agent_id": agent_id,
+                })
+
             elif kind == "on_chat_model_stream":
                 chunk = event.get("data", {}).get("chunk")
                 if chunk and hasattr(chunk, "content") and chunk.content:
@@ -231,6 +237,12 @@ async def _handle_resume(ws: WebSocket, agent_id: int, value: Any, thread_id: st
                     "type": "tool_end",
                     "agent_id": agent_id,
                     "tool_id": run_id,
+                })
+
+            elif kind == "on_chat_model_start":
+                await _send(ws, {
+                    "type": "llm_start",
+                    "agent_id": agent_id,
                 })
 
             elif kind == "on_chat_model_stream":
