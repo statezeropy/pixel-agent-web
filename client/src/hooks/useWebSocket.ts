@@ -87,11 +87,14 @@ export function useWebSocket(
   const pendingAgentsRef = useRef<ExistingAgent[]>([])
 
   // Set up WebSocket connection
+  const mountIdRef = useRef(0)
   useEffect(() => {
     const sessionId = crypto.randomUUID()
+    const mountId = ++mountIdRef.current
 
     // Fallback: if WS doesn't deliver layout within 5s, use default layout
     const layoutFallbackTimer = setTimeout(() => {
+      if (mountId !== mountIdRef.current) return
       if (!layoutReadyRef.current) {
         console.warn('[WS] Layout not received in time — using default layout')
         const os = getOfficeState()
@@ -102,15 +105,18 @@ export function useWebSocket(
     }, 5000)
 
     const unsubConnect = wsManager.onConnect(() => {
+      if (mountId !== mountIdRef.current) return
       setIsConnected(true)
       wsManager.send({ type: 'client_ready' })
     })
 
     const unsubDisconnect = wsManager.onDisconnect(() => {
+      if (mountId !== mountIdRef.current) return
       setIsConnected(false)
     })
 
     const unsubMessage = wsManager.onMessage((msg: ServerMessage) => {
+      if (mountId !== mountIdRef.current) return
       const os = getOfficeState()
 
       switch (msg.type) {
@@ -511,7 +517,10 @@ export function useWebSocket(
       unsubConnect()
       unsubDisconnect()
       unsubMessage()
-      wsManager.disconnect()
+      // Don't disconnect the singleton wsManager here — the next mount's
+      // connect() call will clean up the previous connection automatically.
+      // Disconnecting here races with StrictMode's remount and kills the
+      // second connection.
     }
   }, [getOfficeState, onLayoutLoaded, isEditDirty])
 
