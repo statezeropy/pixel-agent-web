@@ -320,6 +320,9 @@ function App() {
         officeState={officeState}
         agents={ws.agents}
         agentTools={ws.agentTools}
+        agentStatuses={ws.agentStatuses}
+        agentLlmPhase={ws.agentLlmPhase}
+        streamingText={ws.streamingText}
         subagentCharacters={ws.subagentCharacters}
         containerRef={containerRef}
         zoom={editor.zoom}

@@ -80,6 +80,11 @@ export interface SubagentInterruptMsg {
   parent_tool_id: string
 }
 
+export interface LlmStartMsg {
+  type: 'llm_start'
+  agent_id: number
+}
+
 export interface LlmTokenMsg {
   type: 'llm_token'
   agent_id: number
@@ -132,6 +137,7 @@ export type ServerMessage =
   | InterruptMsg
   | InterruptClearMsg
   | SubagentInterruptMsg
+  | LlmStartMsg
   | LlmTokenMsg
   | LlmEndMsg
   | LayoutLoadedMsg

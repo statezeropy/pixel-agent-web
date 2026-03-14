@@ -38,6 +38,8 @@ export interface WebSocketState {
   selectAgent: (id: number | null) => void
   agentTools: Record<number, ToolActivity[]>
   agentStatuses: Record<number, string>
+  /** Tracks which agents are in LLM generation phase (thinking/typing response) */
+  agentLlmPhase: Record<number, boolean>
   subagentTools: Record<number, Record<string, ToolActivity[]>>
   subagentCharacters: SubagentCharacter[]
   chatMessages: Record<number, ChatMessage[]>
@@ -73,6 +75,7 @@ export function useWebSocket(
   const [selectedAgent, setSelectedAgent] = useState<number | null>(null)
   const [agentTools, setAgentTools] = useState<Record<number, ToolActivity[]>>({})
   const [agentStatuses, setAgentStatuses] = useState<Record<number, string>>({})
+  const [agentLlmPhase, setAgentLlmPhase] = useState<Record<number, boolean>>({})
   const [subagentTools, setSubagentTools] = useState<Record<number, Record<string, ToolActivity[]>>>({})
   const [subagentCharacters, setSubagentCharacters] = useState<SubagentCharacter[]>([])
   const [chatMessages, setChatMessages] = useState<Record<number, ChatMessage[]>>({})
@@ -178,6 +181,12 @@ export function useWebSocket(
             delete next[id]
             return next
           })
+          setAgentLlmPhase((prev) => {
+            if (!(id in prev)) return prev
+            const next = { ...prev }
+            delete next[id]
+            return next
+          })
           setSubagentTools((prev) => {
             if (!(id in prev)) return prev
             const next = { ...prev }
@@ -214,7 +223,20 @@ export function useWebSocket(
             }
             return { ...prev, [id]: status }
           })
+          // Clear LLM phase on any terminal status
+          if (status === 'waiting' || status === 'error') {
+            setAgentLlmPhase((prev) => {
+              if (!(id in prev)) return prev
+              const next = { ...prev }
+              delete next[id]
+              return next
+            })
+          }
           os.setAgentActive(id, status === 'active')
+          if (status === 'active') {
+            // Show thinking bubble when agent first becomes active
+            os.showThinkingBubble(id)
+          }
           if (status === 'waiting') {
             os.showWaitingBubble(id)
             playDoneSound()
@@ -233,6 +255,44 @@ export function useWebSocket(
               return prev
             })
           }
+          if (status === 'error') {
+            os.showErrorBubble(id)
+            // Flush any partial streaming text as error context
+            setStreamingText((prev) => {
+              const text = prev[id]
+              if (text) {
+                setChatMessages((cm) => ({
+                  ...cm,
+                  [id]: [...(cm[id] || []), { role: 'assistant', content: text, timestamp: Date.now() }],
+                }))
+                const next = { ...prev }
+                delete next[id]
+                return next
+              }
+              return prev
+            })
+            // Add error message to chat
+            const errorText = (msg as { error?: string }).error
+            if (errorText) {
+              setChatMessages((cm) => ({
+                ...cm,
+                [id]: [...(cm[id] || []), { role: 'assistant', content: `Error: ${errorText}`, timestamp: Date.now() }],
+              }))
+            }
+          }
+          break
+        }
+
+        case 'llm_start': {
+          const id = msg.agent_id
+          setAgentLlmPhase((prev) => ({ ...prev, [id]: true }))
+          // Clear error bubble when LLM starts (new generation attempt)
+          os.clearErrorBubble(id)
+          // Show thinking bubble while LLM prepares response
+          os.showThinkingBubble(id)
+          os.setAgentActive(id, true)
+          // Set tool to null so character shows typing animation (not tool-specific)
+          os.setAgentTool(id, null)
           break
         }
 
@@ -240,6 +300,13 @@ export function useWebSocket(
           const id = msg.agent_id
           const toolId = msg.tool_id
           const status = msg.status
+          // Clear LLM phase — agent is now using tools
+          setAgentLlmPhase((prev) => {
+            if (!(id in prev)) return prev
+            const next = { ...prev }
+            delete next[id]
+            return next
+          })
           setAgentTools((prev) => {
             const list = prev[id] || []
             if (list.some((t) => t.toolId === toolId)) return prev
@@ -249,6 +316,7 @@ export function useWebSocket(
           os.setAgentTool(id, toolName)
           os.setAgentActive(id, true)
           os.clearPermissionBubble(id)
+          os.clearThinkingBubble(id)
           // Create sub-agent character for Task tool subtasks
           if (status.startsWith('Subtask:')) {
             const label = status.slice('Subtask:'.length).trim()
@@ -406,6 +474,11 @@ export function useWebSocket(
             ...prev,
             [id]: (prev[id] || '') + msg.content,
           }))
+          // Clear thinking bubble once tokens start streaming (agent is now "typing" response)
+          os.clearThinkingBubble(id)
+          // Ensure character is active and typing during token generation
+          os.setAgentActive(id, true)
+          os.setAgentTool(id, null) // null tool = typing animation
           break
         }
 
@@ -480,6 +553,7 @@ export function useWebSocket(
     selectAgent,
     agentTools,
     agentStatuses,
+    agentLlmPhase,
     subagentTools,
     subagentCharacters,
     chatMessages,
