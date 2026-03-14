@@ -90,6 +90,17 @@ export function useWebSocket(
   useEffect(() => {
     const sessionId = crypto.randomUUID()
 
+    // Fallback: if WS doesn't deliver layout within 5s, use default layout
+    const layoutFallbackTimer = setTimeout(() => {
+      if (!layoutReadyRef.current) {
+        console.warn('[WS] Layout not received in time — using default layout')
+        const os = getOfficeState()
+        onLayoutLoaded?.(os.getLayout())
+        layoutReadyRef.current = true
+        setLayoutReady(true)
+      }
+    }, 5000)
+
     const unsubConnect = wsManager.onConnect(() => {
       setIsConnected(true)
       wsManager.send({ type: 'client_ready' })
@@ -496,6 +507,7 @@ export function useWebSocket(
     wsManager.connect(`${WS_URL}/${sessionId}`)
 
     return () => {
+      clearTimeout(layoutFallbackTimer)
       unsubConnect()
       unsubDisconnect()
       unsubMessage()
