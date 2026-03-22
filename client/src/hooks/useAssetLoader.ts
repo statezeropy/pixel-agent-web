@@ -6,7 +6,7 @@
  * from /assets/ and calls the appropriate setter functions.
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import type { SpriteData } from '../office/types.js'
 import type { LoadedAssetData } from '../office/layout/furnitureCatalog.js'
 import { setCharacterTemplates } from '../office/sprites/spriteData.js'
@@ -256,13 +256,13 @@ export function useAssetLoader(): AssetLoadState {
     allReady: false,
   })
 
-  const startedRef = useRef(false)
-
   useEffect(() => {
-    // Prevent double-loading in StrictMode
-    if (startedRef.current) return
-    startedRef.current = true
-
+    // In StrictMode dev mode, effects run twice: mount → cleanup → remount.
+    // The first mount's setState calls are ignored after cleanup because React
+    // considers that instance stale. So we let each mount run its own loadAll
+    // with a cancelled flag — only the second mount's updates take effect.
+    // The loaders (setCharacterTemplates etc.) are idempotent global setters,
+    // so double-loading is safe.
     let cancelled = false
 
     async function loadAll(): Promise<void> {
@@ -299,9 +299,7 @@ export function useAssetLoader(): AssetLoadState {
         setState((prev) => ({ ...prev, floors: true }))
       } catch (err) {
         console.warn('[AssetLoader] Floors not available (using fallback):', err)
-        if (!cancelled) {
-          setState((prev) => ({ ...prev, floors: true }))
-        }
+        if (!cancelled) setState((prev) => ({ ...prev, floors: true }))
       }
 
       // Load furniture (optional — may not exist)
@@ -311,9 +309,7 @@ export function useAssetLoader(): AssetLoadState {
         setState((prev) => ({ ...prev, furniture: true, loadedAssets }))
       } catch (err) {
         console.warn('[AssetLoader] Furniture not available (using built-in sprites):', err)
-        if (!cancelled) {
-          setState((prev) => ({ ...prev, furniture: true }))
-        }
+        if (!cancelled) setState((prev) => ({ ...prev, furniture: true }))
       }
     }
 

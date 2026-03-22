@@ -9,6 +9,9 @@ interface ToolOverlayProps {
   officeState: OfficeState
   agents: number[]
   agentTools: Record<number, ToolActivity[]>
+  agentStatuses: Record<number, string>
+  agentLlmPhase: Record<number, boolean>
+  streamingText: Record<number, string>
   subagentCharacters: SubagentCharacter[]
   containerRef: React.RefObject<HTMLDivElement | null>
   zoom: number
@@ -20,8 +23,14 @@ interface ToolOverlayProps {
 function getActivityText(
   agentId: number,
   agentTools: Record<number, ToolActivity[]>,
+  agentStatuses: Record<number, string>,
+  agentLlmPhase: Record<number, boolean>,
+  streamingText: Record<number, string>,
   isActive: boolean,
 ): string {
+  const status = agentStatuses[agentId]
+  if (status === 'error') return 'Error'
+
   const tools = agentTools[agentId]
   if (tools && tools.length > 0) {
     // Find the latest non-done tool
@@ -37,6 +46,16 @@ function getActivityText(
     }
   }
 
+  // LLM is generating — show thinking or typing
+  if (isActive && agentLlmPhase[agentId]) {
+    if (streamingText[agentId]) return 'Typing...'
+    return 'Thinking...'
+  }
+
+  if (isActive) return 'Working...'
+
+  if (status === 'waiting') return 'Done'
+
   return 'Idle'
 }
 
@@ -44,6 +63,9 @@ export function ToolOverlay({
   officeState,
   agents,
   agentTools,
+  agentStatuses,
+  agentLlmPhase,
+  streamingText,
   subagentCharacters,
   containerRef,
   zoom,
@@ -108,7 +130,7 @@ export function ToolOverlay({
             activityText = sub ? sub.label : 'Subtask'
           }
         } else {
-          activityText = getActivityText(id, agentTools, ch.isActive)
+          activityText = getActivityText(id, agentTools, agentStatuses, agentLlmPhase, streamingText, ch.isActive)
         }
 
         // Determine dot color
@@ -116,11 +138,14 @@ export function ToolOverlay({
         const hasPermission = subHasPermission || tools?.some((t) => t.permissionWait && !t.done)
         const hasActiveTools = tools?.some((t) => !t.done)
         const isActive = ch.isActive
+        const hasError = agentStatuses[id] === 'error'
 
         let dotColor: string | null = null
-        if (hasPermission) {
+        if (hasError) {
+          dotColor = 'var(--pixel-status-error, #DD3333)'
+        } else if (hasPermission) {
           dotColor = 'var(--pixel-status-permission)'
-        } else if (isActive && hasActiveTools) {
+        } else if (isActive && (hasActiveTools || agentLlmPhase[id])) {
           dotColor = 'var(--pixel-status-active)'
         }
 

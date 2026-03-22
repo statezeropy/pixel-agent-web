@@ -1,7 +1,7 @@
 import { TileType, TILE_SIZE, CharacterState } from '../types.js'
 import type { TileType as TileTypeVal, FurnitureInstance, Character, SpriteData, Seat, FloorColor } from '../types.js'
 import { getCachedSprite, getOutlineSprite } from '../sprites/spriteCache.js'
-import { getCharacterSprites, BUBBLE_PERMISSION_SPRITE, BUBBLE_WAITING_SPRITE } from '../sprites/spriteData.js'
+import { getCharacterSprites, BUBBLE_PERMISSION_SPRITE, BUBBLE_WAITING_SPRITE, BUBBLE_ERROR_SPRITE, BUBBLE_THINKING_SPRITE } from '../sprites/spriteData.js'
 import { getCharacterSprite } from './characters.js'
 import { renderMatrixEffect } from './matrixEffect.js'
 import { getColorizedFloorSprite, hasFloorSprites, WALL_COLOR } from '../floorTiles.js'
@@ -457,13 +457,17 @@ export function renderBubbles(
   for (const ch of characters) {
     if (!ch.bubbleType) continue
 
-    const sprite = ch.bubbleType === 'permission'
-      ? BUBBLE_PERMISSION_SPRITE
-      : BUBBLE_WAITING_SPRITE
+    let sprite: SpriteData
+    switch (ch.bubbleType) {
+      case 'permission': sprite = BUBBLE_PERMISSION_SPRITE; break
+      case 'error': sprite = BUBBLE_ERROR_SPRITE; break
+      case 'thinking': sprite = BUBBLE_THINKING_SPRITE; break
+      default: sprite = BUBBLE_WAITING_SPRITE; break
+    }
 
-    // Compute opacity: permission = full, waiting = fade in last 0.5s
+    // Compute opacity: permission/error = full, waiting/thinking = fade in last 0.5s
     let alpha = 1.0
-    if (ch.bubbleType === 'waiting' && ch.bubbleTimer < BUBBLE_FADE_DURATION_SEC) {
+    if ((ch.bubbleType === 'waiting' || ch.bubbleType === 'thinking') && ch.bubbleTimer < BUBBLE_FADE_DURATION_SEC) {
       alpha = ch.bubbleTimer / BUBBLE_FADE_DURATION_SEC
     }
 

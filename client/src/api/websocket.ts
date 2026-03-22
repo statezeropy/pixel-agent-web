@@ -26,6 +26,19 @@ export class WebSocketManager {
     this.url = url
     this.cleanup()
 
+    // Close any existing WebSocket before opening a new one
+    if (this.ws) {
+      // Remove handlers to prevent stale events (e.g. onclose triggering reconnect)
+      this.ws.onopen = null
+      this.ws.onclose = null
+      this.ws.onerror = null
+      this.ws.onmessage = null
+      if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+        this.ws.close(1000, 'Reconnecting')
+      }
+      this.ws = null
+    }
+
     this.ws = new WebSocket(url)
 
     this.ws.onopen = () => {

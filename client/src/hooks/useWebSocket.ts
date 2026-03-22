@@ -38,6 +38,8 @@ export interface WebSocketState {
   selectAgent: (id: number | null) => void
   agentTools: Record<number, ToolActivity[]>
   agentStatuses: Record<number, string>
+  /** Tracks which agents are in LLM generation phase (thinking/typing response) */
+  agentLlmPhase: Record<number, boolean>
   subagentTools: Record<number, Record<string, ToolActivity[]>>
   subagentCharacters: SubagentCharacter[]
   chatMessages: Record<number, ChatMessage[]>
@@ -73,6 +75,7 @@ export function useWebSocket(
   const [selectedAgent, setSelectedAgent] = useState<number | null>(null)
   const [agentTools, setAgentTools] = useState<Record<number, ToolActivity[]>>({})
   const [agentStatuses, setAgentStatuses] = useState<Record<number, string>>({})
+  const [agentLlmPhase, setAgentLlmPhase] = useState<Record<number, boolean>>({})
   const [subagentTools, setSubagentTools] = useState<Record<number, Record<string, ToolActivity[]>>>({})
   const [subagentCharacters, setSubagentCharacters] = useState<SubagentCharacter[]>([])
   const [chatMessages, setChatMessages] = useState<Record<number, ChatMessage[]>>({})
@@ -84,19 +87,36 @@ export function useWebSocket(
   const pendingAgentsRef = useRef<ExistingAgent[]>([])
 
   // Set up WebSocket connection
+  const mountIdRef = useRef(0)
   useEffect(() => {
     const sessionId = crypto.randomUUID()
+    const mountId = ++mountIdRef.current
+
+    // Fallback: if WS doesn't deliver layout within 5s, use default layout
+    const layoutFallbackTimer = setTimeout(() => {
+      if (mountId !== mountIdRef.current) return
+      if (!layoutReadyRef.current) {
+        console.warn('[WS] Layout not received in time — using default layout')
+        const os = getOfficeState()
+        onLayoutLoaded?.(os.getLayout())
+        layoutReadyRef.current = true
+        setLayoutReady(true)
+      }
+    }, 5000)
 
     const unsubConnect = wsManager.onConnect(() => {
+      if (mountId !== mountIdRef.current) return
       setIsConnected(true)
       wsManager.send({ type: 'client_ready' })
     })
 
     const unsubDisconnect = wsManager.onDisconnect(() => {
+      if (mountId !== mountIdRef.current) return
       setIsConnected(false)
     })
 
     const unsubMessage = wsManager.onMessage((msg: ServerMessage) => {
+      if (mountId !== mountIdRef.current) return
       const os = getOfficeState()
 
       switch (msg.type) {
@@ -178,6 +198,12 @@ export function useWebSocket(
             delete next[id]
             return next
           })
+          setAgentLlmPhase((prev) => {
+            if (!(id in prev)) return prev
+            const next = { ...prev }
+            delete next[id]
+            return next
+          })
           setSubagentTools((prev) => {
             if (!(id in prev)) return prev
             const next = { ...prev }
@@ -214,6 +240,15 @@ export function useWebSocket(
             }
             return { ...prev, [id]: status }
           })
+          // Clear LLM phase on any terminal status
+          if (status === 'waiting' || status === 'error') {
+            setAgentLlmPhase((prev) => {
+              if (!(id in prev)) return prev
+              const next = { ...prev }
+              delete next[id]
+              return next
+            })
+          }
           os.setAgentActive(id, status === 'active')
           if (status === 'waiting') {
             os.showWaitingBubble(id)
@@ -233,6 +268,39 @@ export function useWebSocket(
               return prev
             })
           }
+          if (status === 'error') {
+            // Flush any partial streaming text as error context
+            setStreamingText((prev) => {
+              const text = prev[id]
+              if (text) {
+                setChatMessages((cm) => ({
+                  ...cm,
+                  [id]: [...(cm[id] || []), { role: 'assistant', content: text, timestamp: Date.now() }],
+                }))
+                const next = { ...prev }
+                delete next[id]
+                return next
+              }
+              return prev
+            })
+            // Add error message to chat
+            const errorText = (msg as { error?: string }).error
+            if (errorText) {
+              setChatMessages((cm) => ({
+                ...cm,
+                [id]: [...(cm[id] || []), { role: 'assistant', content: `Error: ${errorText}`, timestamp: Date.now() }],
+              }))
+            }
+          }
+          break
+        }
+
+        case 'llm_start': {
+          const id = msg.agent_id
+          setAgentLlmPhase((prev) => ({ ...prev, [id]: true }))
+          os.setAgentActive(id, true)
+          // Set tool to null so character shows typing animation (not tool-specific)
+          os.setAgentTool(id, null)
           break
         }
 
@@ -240,6 +308,13 @@ export function useWebSocket(
           const id = msg.agent_id
           const toolId = msg.tool_id
           const status = msg.status
+          // Clear LLM phase — agent is now using tools
+          setAgentLlmPhase((prev) => {
+            if (!(id in prev)) return prev
+            const next = { ...prev }
+            delete next[id]
+            return next
+          })
           setAgentTools((prev) => {
             const list = prev[id] || []
             if (list.some((t) => t.toolId === toolId)) return prev
@@ -406,6 +481,9 @@ export function useWebSocket(
             ...prev,
             [id]: (prev[id] || '') + msg.content,
           }))
+          // Ensure character is active and typing during token generation
+          os.setAgentActive(id, true)
+          os.setAgentTool(id, null) // null tool = typing animation
           break
         }
 
@@ -435,10 +513,14 @@ export function useWebSocket(
     wsManager.connect(`${WS_URL}/${sessionId}`)
 
     return () => {
+      clearTimeout(layoutFallbackTimer)
       unsubConnect()
       unsubDisconnect()
       unsubMessage()
-      wsManager.disconnect()
+      // Don't disconnect the singleton wsManager here — the next mount's
+      // connect() call will clean up the previous connection automatically.
+      // Disconnecting here races with StrictMode's remount and kills the
+      // second connection.
     }
   }, [getOfficeState, onLayoutLoaded, isEditDirty])
 
@@ -480,6 +562,7 @@ export function useWebSocket(
     selectAgent,
     agentTools,
     agentStatuses,
+    agentLlmPhase,
     subagentTools,
     subagentCharacters,
     chatMessages,
